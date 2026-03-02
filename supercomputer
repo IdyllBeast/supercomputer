@@ -1,0 +1,504 @@
+#!/usr/bin/env python3
+"""
+SUPERCOMPUTER - LED Array Simulator
+Simulates an array of self-flashing LEDs that gradually desynchronize
+Watch the mesmerizing chaos of a blinking LED supercomputer!
+"""
+
+import sys
+import time
+import random
+import argparse
+import os
+import signal
+from contextlib import contextmanager
+
+# Constants
+MIN_INTERVAL = 0.05  # Minimum LED toggle interval in seconds
+DISPLAY_FPS = 10  # Display refresh rate
+DISPLAY_INTERVAL = 1.0 / DISPLAY_FPS  # Time between display updates
+UPDATE_SLEEP = 0.001  # Main loop sleep to prevent CPU spinning
+KEYBOARD_TIMEOUT = 0.01  # Keyboard select timeout
+
+# Grid constraints
+MIN_GRID_SIZE = 3
+MAX_GRID_SIZE = 100
+DEFAULT_GRID_SIZE = 12
+
+# Rate constraints (milliseconds)
+MIN_RATE = 50
+MAX_RATE = 5000
+DEFAULT_RATE = 2000
+
+# Variance/drift constraints (percentage)
+MIN_PERCENT = 0
+MAX_PERCENT = 100
+DEFAULT_VARIANCE = 0
+DEFAULT_DRIFT = 1
+
+
+@contextmanager
+def raw_terminal():
+    """Context manager for raw terminal mode"""
+    try:
+        import tty
+        import termios
+        
+        old_settings = termios.tcgetattr(sys.stdin)
+        try:
+            tty.setcbreak(sys.stdin.fileno())
+            yield
+        finally:
+            termios.tcsetattr(sys.stdin, termios.TCSADRAIN, old_settings)
+    except (ImportError, termios.error):
+        # If terminal control not available, just pass through
+        yield
+
+
+class LED:
+    """Represents a single LED with its own timing"""
+    
+    def __init__(self, led_id, base_rate, variance, drift_rate):
+        self.led_id = led_id
+        self.base_rate = base_rate
+        self.variance = variance
+        self.drift_rate = drift_rate
+        self.is_on = False
+        self.accumulated_drift = 0
+        self.next_toggle_time = 0
+        
+    def calculate_next_interval(self):
+        """Calculate next toggle interval with variance and drift"""
+        # Apply random variance
+        variance_amount = self.base_rate * (self.variance / 100.0)
+        random_variance = (random.random() - 0.5) * 2 * variance_amount
+        
+        # Apply accumulated drift
+        drift_amount = self.base_rate * (self.drift_rate / 100.0)
+        random_drift = (random.random() - 0.5) * 2 * drift_amount
+        self.accumulated_drift += random_drift
+        
+        # Calculate final interval (minimum to prevent too-fast toggling)
+        interval = max(MIN_INTERVAL, (self.base_rate + random_variance + self.accumulated_drift) / 1000.0)
+        return interval
+    
+    def schedule_next_toggle(self, current_time):
+        """Schedule the next toggle time"""
+        interval = self.calculate_next_interval()
+        self.next_toggle_time = current_time + interval
+    
+    def toggle(self):
+        """Toggle the LED state"""
+        self.is_on = not self.is_on
+    
+    def reset(self):
+        """Reset the LED state"""
+        self.is_on = False
+        self.accumulated_drift = 0
+        self.next_toggle_time = 0
+    
+    def update_params(self, base_rate, variance, drift_rate):
+        """Update LED parameters"""
+        self.base_rate = base_rate
+        self.variance = variance
+        self.drift_rate = drift_rate
+
+
+class LEDArraySimulator:
+    """Manages the entire LED array"""
+    
+    def __init__(self, grid_size=DEFAULT_GRID_SIZE, base_rate=DEFAULT_RATE, variance=DEFAULT_VARIANCE, drift_rate=DEFAULT_DRIFT, auto_size=False, stealth=False, lock=False):
+        self.base_rate = base_rate
+        self.variance = variance
+        self.drift_rate = drift_rate
+        self.leds = []
+        self.running = False
+        self.auto_size = auto_size
+        self.stealth = stealth
+        self.lock = lock
+        self.start_time = None
+        
+        if auto_size:
+            self.grid_size = self.calculate_optimal_grid_size()
+        else:
+            self.grid_size = grid_size
+        
+        # Create LED array
+        self.create_led_array()
+    
+    def calculate_optimal_grid_size(self):
+        """Calculate grid size based on terminal dimensions"""
+        try:
+            import shutil
+            cols, rows = shutil.get_terminal_size()
+        except:
+            # Fallback if terminal size detection fails
+            return DEFAULT_GRID_SIZE
+        
+        # Reserve space for header (5 lines), footer (4 lines), and borders
+        available_rows = rows - 9
+        
+        # Each LED takes 1 row and ~4 columns (3 chars + space)
+        max_rows = max(MIN_GRID_SIZE, available_rows)
+        max_cols = max(MIN_GRID_SIZE, cols // 4 - 1)
+        
+        # Use the smaller dimension for a square grid
+        size = min(max_rows, max_cols)
+        return max(MIN_GRID_SIZE, min(size, MAX_GRID_SIZE))
+    
+    def create_led_array(self):
+        """Create or recreate the LED array"""
+        self.leds = []
+        total_leds = self.grid_size * self.grid_size
+        for i in range(total_leds):
+            led = LED(i, self.base_rate, self.variance, self.drift_rate)
+            self.leds.append(led)
+    
+    def resize(self):
+        """Handle terminal resize"""
+        # If locked, don't resize the grid
+        if self.lock:
+            return False
+        
+        if self.auto_size:
+            new_size = self.calculate_optimal_grid_size()
+            if new_size != self.grid_size:
+                self.grid_size = new_size
+                was_running = self.running
+                if was_running:
+                    self.stop()
+                self.create_led_array()
+                if was_running:
+                    self.start()
+                return True
+        return False
+    
+    def start(self):
+        """Start all LEDs"""
+        if not self.running:
+            self.running = True
+            self.start_time = time.monotonic()
+            # Initialize all LEDs to toggle at start time
+            for led in self.leds:
+                led.schedule_next_toggle(self.start_time)
+    
+    def stop(self):
+        """Stop all LEDs"""
+        self.running = False
+    
+    def reset(self):
+        """Reset all LEDs"""
+        self.stop()
+        for led in self.leds:
+            led.reset()
+        self.start_time = None
+    
+    def update(self):
+        """Update all LEDs based on current time"""
+        if not self.running:
+            return
+        
+        current_time = time.monotonic()
+        
+        # Check each LED and toggle if it's time
+        for led in self.leds:
+            if current_time >= led.next_toggle_time:
+                led.toggle()
+                led.schedule_next_toggle(current_time)
+    
+    def update_params(self, base_rate=None, variance=None, drift_rate=None):
+        """Update parameters for all LEDs"""
+        if base_rate is not None:
+            self.base_rate = base_rate
+        if variance is not None:
+            self.variance = variance
+        if drift_rate is not None:
+            self.drift_rate = drift_rate
+        
+        for led in self.leds:
+            led.update_params(self.base_rate, self.variance, self.drift_rate)
+    
+    def get_display_grid(self):
+        """Get current state as a grid for display"""
+        grid = []
+        for i in range(self.grid_size):
+            row = []
+            for j in range(self.grid_size):
+                idx = i * self.grid_size + j
+                row.append(self.leds[idx].is_on)
+            grid.append(row)
+        return grid
+    
+    def clear_screen(self):
+        """Clear terminal screen"""
+        print("\033[2J\033[H", end="")
+    
+    def render_header(self):
+        """Render the header section"""
+        header_width = max(self.grid_size * 4 + 1, 40)
+        print("=" * header_width)
+        
+        size_info = f"SUPERCOMPUTER ({self.grid_size}x{self.grid_size})"
+        if self.auto_size:
+            size_info += " [AUTO]"
+        if self.lock:
+            size_info += " [LOCKED]"
+        
+        print(size_info.center(header_width))
+        print("=" * header_width)
+        print()
+    
+    def render_grid(self):
+        """Render the LED grid"""
+        grid = self.get_display_grid()
+        
+        if self.stealth:
+            # Stealth mode: no borders
+            for row in grid:
+                line = ""
+                for led_on in row:
+                    if led_on:
+                        line += "● "
+                    else:
+                        line += "  "
+                print(line)
+        else:
+            # Normal mode: with borders
+            # print("┌" + "─" * (self.grid_size * 4 - 1) + "┐")
+            
+            for row in grid:
+                line = ""
+                for led_on in row:
+                    if led_on:
+                        line += "● "
+                    else:
+                        line += "  "
+                line += ""
+                print(line)
+            
+            # print("└" + "─" * (self.grid_size * 4 - 1) + "┘")
+    
+    def render_footer(self):
+        """Render the footer with status and controls"""
+        print()
+        print(f"Base Rate: {self.base_rate}ms | Variance: {self.variance}% | Drift: {self.drift_rate}%")
+        
+        status_line = f"Status: {'RUNNING' if self.running else 'STOPPED'}"
+        if self.lock:
+            status_line += " | Grid: LOCKED"
+        print(status_line)
+        
+        print()
+        if self.auto_size and not self.lock:
+            print("Commands: [s]tart [p]ause [r]eset [q]uit  (Resize window to adjust grid)")
+        else:
+            print("Commands: [s]tart [p]ause [r]eset [q]uit")
+        print("          [+/-] adjust rate  [v] variance  [d] drift")
+    
+    def print_grid(self):
+        """Print the LED grid to terminal"""
+        self.clear_screen()
+        
+        if not self.stealth:
+            self.render_header()
+        
+        self.render_grid()
+        
+        if not self.stealth:
+            self.render_footer()
+
+
+def interactive_mode(simulator):
+    """Run interactive mode with keyboard controls"""
+    try:
+        import select
+        
+        # Set up signal handler for window resize (just call resize directly)
+        signal.signal(signal.SIGWINCH, lambda s, f: simulator.resize())
+        
+        with raw_terminal():
+            print("Starting interactive mode...")
+            if simulator.stealth:
+                print("STEALTH MODE: Only LED array visible")
+            if simulator.auto_size:
+                print("Grid will automatically adjust to window size!")
+            if simulator.lock:
+                print("LOCKED: Grid size will not change on window resize")
+            if not simulator.stealth:
+                print("Press 's' to start, 'q' to quit")
+            time.sleep(2)
+            
+            last_update = time.monotonic()
+            
+            while True:
+                # Resize check (happens every frame, returns early if nothing changed)
+                simulator.resize()
+                
+                # Update LED states
+                simulator.update()
+                
+                # Update display at configured FPS
+                current_time = time.monotonic()
+                if current_time - last_update >= DISPLAY_INTERVAL:
+                    simulator.print_grid()
+                    last_update = current_time
+                
+                # Check for keyboard input (non-blocking)
+                if select.select([sys.stdin], [], [], KEYBOARD_TIMEOUT)[0]:
+                    key = sys.stdin.read(1).lower()
+                    
+                    if key == 'q':
+                        break
+                    elif key == 's':
+                        simulator.start()
+                    elif key == 'p':
+                        simulator.stop()
+                    elif key == 'r':
+                        simulator.reset()
+                    elif key == '+':
+                        simulator.update_params(base_rate=min(MAX_RATE, simulator.base_rate + 50))
+                    elif key == '-':
+                        simulator.update_params(base_rate=max(MIN_RATE, simulator.base_rate - 50))
+                    elif key == 'v':
+                        simulator.update_params(variance=min(MAX_PERCENT, simulator.variance + 5))
+                    elif key == 'd':
+                        simulator.update_params(drift_rate=min(MAX_PERCENT, simulator.drift_rate + 5))
+                
+                time.sleep(UPDATE_SLEEP)
+    
+    except ImportError:
+        print("Interactive mode requires a Unix-like terminal")
+        print("Running in simple display mode instead...")
+        simple_display_mode(simulator)
+
+
+def simple_display_mode(simulator):
+    """Simple display mode that just shows the animation"""
+    # Set up signal handler for window resize (just call resize directly)
+    signal.signal(signal.SIGWINCH, lambda s, f: simulator.resize())
+    
+    print("Starting SUPERCOMPUTER simulation...")
+    if simulator.stealth:
+        print("STEALTH MODE: Only LED array visible")
+    if simulator.auto_size:
+        print("Grid will automatically adjust to window size!")
+    if simulator.lock:
+        print("LOCKED: Grid size will not change on window resize")
+    if not simulator.stealth:
+        print("Press Ctrl+C to stop")
+    print()
+    time.sleep(2)
+    
+    simulator.start()
+    
+    try:
+        while True:
+            # Resize check (happens every frame, returns early if nothing changed)
+            simulator.resize()
+            
+            # Update LED states
+            simulator.update()
+            
+            simulator.print_grid()
+            time.sleep(UPDATE_SLEEP)
+    except KeyboardInterrupt:
+        print("\n\nStopping simulation...")
+
+
+def bounded_int(min_val, max_val, name="value"):
+    """Create a validator for bounded integer arguments"""
+    def validator(value):
+        ivalue = int(value)
+        if not min_val <= ivalue <= max_val:
+            raise argparse.ArgumentTypeError(
+                f"{name} must be between {min_val} and {max_val}, got {ivalue}"
+            )
+        return ivalue
+    return validator
+
+
+def main():
+    parser = argparse.ArgumentParser(
+        description="SUPERCOMPUTER - Watch LEDs gradually desynchronize into beautiful chaos",
+        formatter_class=argparse.RawDescriptionHelpFormatter,
+        epilog="""
+Examples:
+  supercomputer                          # Run with defaults (12x12, 2s rate, 0 variance)
+  supercomputer --auto                   # Auto-size to fill terminal window
+  supercomputer --stealth                # Stealth mode: LEDs only, no UI
+  supercomputer --auto --stealth         # Auto-size in stealth mode (ULTIMATE)
+  supercomputer --lock                   # Lock grid size, window can't affect it
+  supercomputer --auto --lock            # Set initial size from window, then lock
+  supercomputer -s 10                    # 10x10 grid
+  supercomputer -r 500 -v 30 -d 20       # Faster with chaos (old defaults)
+  supercomputer -s 15 -r 1000 -d 50      # Large slow grid with high drift
+  supercomputer --simple                 # Auto-start without interactive controls
+  supercomputer --auto --simple          # Auto-size + auto-start
+        """
+    )
+    
+    parser.add_argument('-s', '--size', 
+                        type=bounded_int(MIN_GRID_SIZE, MAX_GRID_SIZE, "grid size"),
+                        default=DEFAULT_GRID_SIZE, 
+                        help=f'Grid size (default: {DEFAULT_GRID_SIZE}, ignored if --auto is used)')
+    parser.add_argument('--auto', action='store_true',
+                        help='Automatically size grid to fill terminal window and respond to resizes')
+    parser.add_argument('--stealth', action='store_true',
+                        help='Stealth mode: show only LED array, hide all UI elements')
+    parser.add_argument('--lock', action='store_true',
+                        help='Lock grid size - prevent resizing when terminal window changes')
+    parser.add_argument('-r', '--rate',
+                        type=bounded_int(MIN_RATE, MAX_RATE, "rate"),
+                        default=DEFAULT_RATE,
+                        help=f'Base flicker rate in ms (default: {DEFAULT_RATE})')
+    parser.add_argument('-v', '--variance',
+                        type=bounded_int(MIN_PERCENT, MAX_PERCENT, "variance"),
+                        default=DEFAULT_VARIANCE,
+                        help=f'Timing variance percentage (default: {DEFAULT_VARIANCE})')
+    parser.add_argument('-d', '--drift',
+                        type=bounded_int(MIN_PERCENT, MAX_PERCENT, "drift"),
+                        default=DEFAULT_DRIFT,
+                        help=f'Drift accumulation rate (default: {DEFAULT_DRIFT})')
+    parser.add_argument('--simple', action='store_true',
+                        help='Simple mode: auto-start without interactive controls')
+    parser.add_argument('--duration', type=int,
+                        help='Run for specified seconds then exit (simple mode only)')
+    
+    args = parser.parse_args()
+    
+    # No manual validation needed - argument types handle it!
+    
+    # Create simulator
+    simulator = LEDArraySimulator(
+        grid_size=args.size,
+        base_rate=args.rate,
+        variance=args.variance,
+        drift_rate=args.drift,
+        auto_size=args.auto,
+        stealth=args.stealth,
+        lock=args.lock
+    )
+    
+    try:
+        if args.simple:
+            simulator.start()
+            if args.duration:
+                print(f"Running for {args.duration} seconds...")
+                for _ in range(args.duration * 10):
+                    simulator.print_grid()
+                    time.sleep(0.1)
+            else:
+                simple_display_mode(simulator)
+        else:
+            interactive_mode(simulator)
+    
+    except KeyboardInterrupt:
+        print("\n\nShutting down...")
+    
+    finally:
+        simulator.stop()
+        print("Done!")
+
+
+if __name__ == "__main__":
+    main()
