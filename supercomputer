@@ -264,19 +264,19 @@ class LEDArraySimulator:
                 print(line)
         else:
             # Normal mode: with borders
-            # print("┌" + "─" * (self.grid_size * 4 - 1) + "┐")
+            print("┌" + "─" * (self.grid_size * 4 - 1) + "┐")
             
             for row in grid:
-                line = ""
+                line = "|"
                 for led_on in row:
                     if led_on:
                         line += "● "
                     else:
                         line += "  "
-                line += ""
+                line += "|"
                 print(line)
             
-            # print("└" + "─" * (self.grid_size * 4 - 1) + "┘")
+            print("└" + "─" * (self.grid_size * 4 - 1) + "┘")
     
     def render_footer(self):
         """Render the footer with status and controls"""
