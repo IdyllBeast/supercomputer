@@ -52,7 +52,7 @@ Status: RUNNING | Base Rate: 2000ms | Variance: 30% | Drift: 20%
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/supercomputer.git
+git clone https://github.com/IdyllBeast/supercomputer.git
 cd supercomputer
 
 # Make executable
@@ -313,7 +313,7 @@ Contributions are welcome! Here are some ideas:
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/supercomputer.git
+git clone https://github.com/IdyllBeast/supercomputer.git
 cd supercomputer
 
 # Make your changes
@@ -369,8 +369,8 @@ Free to use, modify, and distribute. Make it your own!
 
 ## 📬 Contact
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/supercomputer/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/supercomputer/discussions)
+- **Issues**: [GitHub Issues](https://github.com/IdyllBeast/supercomputer/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/IdyllBeast/supercomputer/discussions)
 
 ---
 
