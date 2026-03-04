@@ -22,7 +22,7 @@ KEYBOARD_TIMEOUT = 0.01  # Keyboard select timeout
 
 # Grid constraints
 MIN_GRID_SIZE = 3
-MAX_GRID_SIZE = 100
+MAX_GRID_SIZE = 40
 DEFAULT_GRID_SIZE = 12
 
 # Rate constraints (milliseconds)
@@ -66,6 +66,7 @@ class LED:
         self.is_on = False
         self.accumulated_drift = 0
         self.next_toggle_time = 0
+        self.color_index = 0  # For color cycling
         
     def calculate_next_interval(self):
         """Calculate next toggle interval with variance and drift"""
@@ -90,6 +91,9 @@ class LED:
     def toggle(self):
         """Toggle the LED state"""
         self.is_on = not self.is_on
+        # Cycle to next color when turning on
+        if self.is_on:
+            self.color_index = (self.color_index + 1) % 6
     
     def reset(self):
         """Reset the LED state"""
@@ -107,7 +111,7 @@ class LED:
 class LEDArraySimulator:
     """Manages the entire LED array"""
     
-    def __init__(self, grid_size=DEFAULT_GRID_SIZE, base_rate=DEFAULT_RATE, variance=DEFAULT_VARIANCE, drift_rate=DEFAULT_DRIFT, auto_size=False, stealth=False, lock=False):
+    def __init__(self, grid_size=DEFAULT_GRID_SIZE, base_rate=DEFAULT_RATE, variance=DEFAULT_VARIANCE, drift_rate=DEFAULT_DRIFT, auto_size=False, stealth=False, lock=False, color_mode=None):
         self.base_rate = base_rate
         self.variance = variance
         self.drift_rate = drift_rate
@@ -116,6 +120,7 @@ class LEDArraySimulator:
         self.auto_size = auto_size
         self.stealth = stealth
         self.lock = lock
+        self.color_mode = color_mode  # None, 'cycle', 'gradient', 'rainbow'
         self.start_time = None
         
         if auto_size:
@@ -243,10 +248,46 @@ class LEDArraySimulator:
             size_info += " [AUTO]"
         if self.lock:
             size_info += " [LOCKED]"
+        if self.color_mode:
+            size_info += f" [COLOR:{self.color_mode.upper()}]"
         
         print(size_info.center(header_width))
         print("=" * header_width)
         print()
+    
+    def get_color(self, led, row_idx, col_idx):
+        """Get ANSI color code for an LED based on color mode"""
+        if self.color_mode is None:
+            return ""
+        
+        COLORS = [
+            '\033[91m',  # Red
+            '\033[93m',  # Yellow
+            '\033[92m',  # Green
+            '\033[96m',  # Cyan
+            '\033[94m',  # Blue
+            '\033[95m',  # Magenta
+        ]
+        RESET = '\033[0m'
+        
+        if self.color_mode == 'cycle':
+            # Each LED cycles through colors when it toggles
+            color = COLORS[led.color_index]
+            return f"{color} ● {RESET}"
+        
+        elif self.color_mode == 'gradient':
+            # Gradient across the grid (left to right)
+            color_idx = int((col_idx / self.grid_size) * len(COLORS))
+            color = COLORS[min(color_idx, len(COLORS) - 1)]
+            return f"{color} ● {RESET}"
+        
+        elif self.color_mode == 'rainbow':
+            # Rainbow pattern (diagonal)
+            color_idx = (row_idx + col_idx) % len(COLORS)
+            color = COLORS[color_idx]
+            return f"{color} ● {RESET}"
+        
+        return " ● "
     
     def render_grid(self):
         """Render the LED grid"""
@@ -254,26 +295,38 @@ class LEDArraySimulator:
         
         if self.stealth:
             # Stealth mode: no borders
-            for row in grid:
+            led_idx = 0
+            for row_idx, row in enumerate(grid):
                 line = ""
-                for led_on in row:
+                for col_idx, led_on in enumerate(row):
                     if led_on:
-                        line += "● "
+                        if self.color_mode:
+                            led = self.leds[led_idx]
+                            line += self.get_color(led, row_idx, col_idx)
+                        else:
+                            line += " ● "
                     else:
-                        line += "  "
+                        line += " ○ "
+                    led_idx += 1
                 print(line)
         else:
             # Normal mode: with borders
             print("┌" + "─" * (self.grid_size * 4 - 1) + "┐")
             
-            for row in grid:
-                line = "|"
-                for led_on in row:
+            led_idx = 0
+            for row_idx, row in enumerate(grid):
+                line = "│"
+                for col_idx, led_on in enumerate(row):
                     if led_on:
-                        line += "● "
+                        if self.color_mode:
+                            led = self.leds[led_idx]
+                            line += self.get_color(led, row_idx, col_idx)
+                        else:
+                            line += " ● "
                     else:
-                        line += "  "
-                line += "|"
+                        line += " ○ "
+                    led_idx += 1
+                line += "│"
                 print(line)
             
             print("└" + "─" * (self.grid_size * 4 - 1) + "┘")
@@ -427,6 +480,9 @@ Examples:
   supercomputer --auto                   # Auto-size to fill terminal window
   supercomputer --stealth                # Stealth mode: LEDs only, no UI
   supercomputer --auto --stealth         # Auto-size in stealth mode (ULTIMATE)
+  supercomputer --color cycle            # LEDs change color each time they flash
+  supercomputer --color gradient         # Gradient across the grid
+  supercomputer --color rainbow          # Rainbow diagonal pattern
   supercomputer --lock                   # Lock grid size, window can't affect it
   supercomputer --auto --lock            # Set initial size from window, then lock
   supercomputer -s 10                    # 10x10 grid
@@ -447,6 +503,9 @@ Examples:
                         help='Stealth mode: show only LED array, hide all UI elements')
     parser.add_argument('--lock', action='store_true',
                         help='Lock grid size - prevent resizing when terminal window changes')
+    parser.add_argument('--color', 
+                        choices=['cycle', 'gradient', 'rainbow'],
+                        help='Color mode: cycle (LEDs change color), gradient (left-to-right), rainbow (diagonal pattern)')
     parser.add_argument('-r', '--rate',
                         type=bounded_int(MIN_RATE, MAX_RATE, "rate"),
                         default=DEFAULT_RATE,
@@ -476,7 +535,8 @@ Examples:
         drift_rate=args.drift,
         auto_size=args.auto,
         stealth=args.stealth,
-        lock=args.lock
+        lock=args.lock,
+        color_mode=args.color
     )
     
     try:
