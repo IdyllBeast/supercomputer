@@ -16,6 +16,7 @@ Watch as perfectly synchronized LEDs slowly drift apart, creating organic, unpre
 - 📐 **Dynamic Auto-Sizing** - Grid automatically adjusts to fill your terminal window
 - 🎭 **Stealth Mode** - Pure LED display with zero UI clutter
 - 🔒 **Lock Mode** - Fix grid size independent of window dimensions
+- 🌈 **Color Modes** - Cycle, gradient, and rainbow color effects
 - ⚡ **Real-Time Controls** - Adjust flicker rate, variance, and drift on the fly
 - 🎨 **Fully Customizable** - Modify LED characters, borders, colors, and themes
 - 🧵 **High Performance** - Runs smoothly with grids up to 40×40 LEDs
@@ -52,7 +53,7 @@ Status: RUNNING | Base Rate: 2000ms | Variance: 30% | Drift: 20%
 
 ```bash
 # Clone the repository
-git clone https://github.com/IdyllBeast/supercomputer.git
+git clone https://github.com/yourusername/supercomputer.git
 cd supercomputer
 
 # Make executable
@@ -99,6 +100,7 @@ Options:
   --auto                Auto-size grid to terminal dimensions
   --stealth             Hide all UI elements (LEDs only)
   --lock                Prevent grid resize on window change
+  --color MODE          Color mode: cycle, gradient, or rainbow
   --simple              Auto-start without interactive controls
   --duration N          Run for N seconds then exit
   
@@ -130,17 +132,44 @@ supercomputer --auto --stealth --simple
 ```
 Auto-sizes to fill window, clean display, starts automatically.
 
+### Color Modes
+```bash
+# LEDs change color each time they flash
+supercomputer --color cycle
+
+# Horizontal gradient across the grid
+supercomputer --color gradient
+
+# Diagonal rainbow pattern
+supercomputer --color rainbow
+
+# Combine with other modes
+supercomputer --auto --stealth --color gradient
+```
+
 ### Maximum Chaos
 ```bash
 supercomputer --auto --stealth -v 100 -d 100 -r 100
 ```
 Fast, unpredictable, mesmerizing.
 
+### Psychedelic Colors
+```bash
+supercomputer --color cycle -v 80 -d 70 -r 200
+```
+Rapid color changes with high chaos.
+
 ### Slow & Hypnotic
 ```bash
 supercomputer --auto --stealth -v 10 -d 5 -r 1500
 ```
 Gentle, meditative drifting.
+
+### Rainbow Meditation
+```bash
+supercomputer --auto --stealth --color rainbow -v 0 -d 1 -r 3000
+```
+Slow, peaceful rainbow pattern.
 
 ### Perfect Sync → Gradual Drift
 ```bash
@@ -154,6 +183,12 @@ supercomputer --stealth --lock -s 16
 ```
 Consistent 16×16 grid that won't change size.
 
+### Colorful Recording
+```bash
+supercomputer --stealth --lock --color gradient -s 20
+```
+Fixed size with beautiful gradient colors.
+
 ### Dual Monitor Ambient Display
 ```bash
 supercomputer --auto --lock --stealth --simple
@@ -166,6 +201,15 @@ Calculates size once, locks it, runs forever.
 
 SUPERCOMPUTER is designed to be easily customizable. Edit the `supercomputer` script to:
 
+### Use Built-in Color Modes
+
+```bash
+# No editing needed - use command-line flags!
+supercomputer --color cycle      # LEDs change color each flash
+supercomputer --color gradient   # Left-to-right gradient
+supercomputer --color rainbow    # Diagonal rainbow pattern
+```
+
 ### Change LED Appearance
 
 ```python
@@ -176,7 +220,22 @@ else:
     line += " ○ "  # Change to: ░ ☆ - or blank spaces
 ```
 
-### Add Colors
+### Customize Color Palette
+
+```python
+# In get_color() method (around line 256)
+COLORS = [
+    '\033[91m',  # Red
+    '\033[93m',  # Yellow
+    '\033[92m',  # Green
+    '\033[96m',  # Cyan
+    '\033[94m',  # Blue
+    '\033[95m',  # Magenta
+]
+# Change these to any ANSI color codes!
+```
+
+### Add Colors Manually
 
 ```python
 # ANSI color codes
@@ -203,6 +262,8 @@ See [GUIDE.md](GUIDE.md) for detailed customization instructions, including:
 - Color reference tables
 - Advanced patterns
 - And much more!
+
+See [COLOR-MODES.md](COLOR-MODES.md) for complete color customization guide.
 
 ---
 
@@ -277,14 +338,16 @@ None! Uses only Python standard library:
 
 ## 🎯 Use Cases
 
-- 🎬 **Presentations** - Eye-catching background animation
-- 🖼️ **Digital Art** - Hypnotic visual display
-- 💻 **Dual Monitors** - Ambient lighting effect
-- 🎥 **Video Production** - Unique animated backgrounds
-- 🧘 **Meditation** - Soothing light patterns
-- 🎮 **Streaming Overlays** - Dynamic screen content
-- 📸 **Photography** - Moving light reference
-- 🖥️ **Screensaver** - Terminal screensaver alternative
+- 🎬 **Presentations** - Eye-catching background animation with color
+- 🖼️ **Digital Art** - Hypnotic visual displays with gradients
+- 💻 **Dual Monitors** - Ambient lighting effect with rainbow modes
+- 🎥 **Video Production** - Unique animated backgrounds with cycling colors
+- 🧘 **Meditation** - Soothing light patterns with gentle gradients
+- 🎮 **Streaming Overlays** - Dynamic colorful screen content
+- 📸 **Photography** - Moving light reference with color cycling
+- 🖥️ **Screensaver** - Terminal screensaver with beautiful colors
+- 🎨 **Light Shows** - Create mesmerizing color patterns
+- 🌈 **Ambient Display** - Colorful background on extra monitors
 
 ---
 
@@ -292,6 +355,7 @@ None! Uses only Python standard library:
 
 - **[GUIDE.md](GUIDE.md)** - Complete installation and customization guide
 - **[QUICKSTART.md](QUICKSTART.md)** - Quick reference for all modes and combinations
+- **[COLOR-MODES.md](COLOR-MODES.md)** - Complete guide to color modes and gradients
 - **[CUSTOMIZE.md](CUSTOMIZE.md)** - Detailed customization instructions
 - **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical architecture documentation
 - **[REFACTORING.md](REFACTORING.md)** - Code quality improvements log
@@ -313,7 +377,7 @@ Contributions are welcome! Here are some ideas:
 
 ```bash
 # Clone the repo
-git clone https://github.com/IdyllBeast/supercomputer.git
+git clone https://github.com/yourusername/supercomputer.git
 cd supercomputer
 
 # Make your changes
@@ -369,8 +433,8 @@ Free to use, modify, and distribute. Make it your own!
 
 ## 📬 Contact
 
-- **Issues**: [GitHub Issues](https://github.com/IdyllBeast/supercomputer/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/IdyllBeast/supercomputer/discussions)
+- **Issues**: [GitHub Issues](https://github.com/yourusername/supercomputer/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/yourusername/supercomputer/discussions)
 
 ---
 
