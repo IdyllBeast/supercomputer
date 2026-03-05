@@ -4,22 +4,17 @@
 
 Watch as perfectly synchronized LEDs slowly drift apart, creating organic, unpredictable light patterns in your terminal.
 
-![License](https://img.shields.io/badge/license-MIT-blue.svg)
-![Python](https://img.shields.io/badge/python-3.6+-brightgreen.svg)
-![Platform](https://img.shields.io/badge/platform-linux%20%7C%20macos%20%7C%20wsl-lightgrey.svg)
-
 ---
 
 ## ✨ Features
 
-- 🎯 **Event-Based Architecture** - Efficient single-loop design, not thread-per-LED
 - 📐 **Dynamic Auto-Sizing** - Grid automatically adjusts to fill your terminal window
 - 🎭 **Stealth Mode** - Pure LED display with zero UI clutter
 - 🔒 **Lock Mode** - Fix grid size independent of window dimensions
 - 🌈 **Color Modes** - Cycle, gradient, and rainbow color effects
 - ⚡ **Real-Time Controls** - Adjust flicker rate, variance, and drift on the fly
-- 🎨 **Fully Customizable** - Modify LED characters, borders, colors, and themes
-- 🧵 **High Performance** - Runs smoothly with grids up to 40×40 LEDs
+- 🎨 **Slightly Customizable** - Modify LED characters and colors
+- 🧵 **Some Performance** - Runs smoothly with grids up to 40×40 LEDs
 - 💻 **Cross-Platform** - Works on Linux, macOS, and WSL
 
 ---
@@ -27,18 +22,16 @@ Watch as perfectly synchronized LEDs slowly drift apart, creating organic, unpre
 ## 🎬 Demo
 
 ```
-┌───────────────────────────────────────────┐
-│ ● ○ ● ○ ● ○ ● ○ ● ○ ● ○ │
-│ ○ ● ○ ● ○ ● ● ○ ● ○ ● ○ │
-│ ● ○ ● ● ○ ● ○ ● ○ ● ○ ● │
-│ ○ ● ○ ● ● ○ ● ○ ● ● ○ ● │
-│ ● ○ ● ○ ● ○ ● ○ ● ○ ● ○ │
-│ ○ ● ● ○ ● ○ ○ ● ○ ● ○ ● │
-│ ● ○ ● ○ ● ○ ● ○ ● ○ ● ○ │
-│ ○ ● ○ ● ○ ● ○ ● ● ○ ● ○ │
-│ ● ○ ● ○ ● ○ ● ○ ● ○ ● ○ │
-│ ○ ● ○ ● ○ ● ○ ● ○ ● ○ ● │
-└───────────────────────────────────────────┘
+ ● ○ ● ○ ● ○ ● ○ ● ○ ● ○ 
+ ○ ● ○ ● ○ ● ● ○ ● ○ ● ○ 
+ ● ○ ● ● ○ ● ○ ● ○ ● ○ ● 
+ ○ ● ○ ● ● ○ ● ○ ● ● ○ ● 
+ ● ○ ● ○ ● ○ ● ○ ● ○ ● ○ 
+ ○ ● ● ○ ● ○ ○ ● ○ ● ○ ● 
+ ● ○ ● ○ ● ○ ● ○ ● ○ ● ○ 
+ ○ ● ○ ● ○ ● ○ ● ● ○ ● ○ 
+ ● ○ ● ○ ● ○ ● ○ ● ○ ● ○ 
+ ○ ● ○ ● ○ ● ○ ● ○ ● ○ ● 
 
 Status: RUNNING | Base Rate: 2000ms | Variance: 30% | Drift: 20%
 ```
@@ -53,7 +46,7 @@ Status: RUNNING | Base Rate: 2000ms | Variance: 30% | Drift: 20%
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/supercomputer.git
+git clone https://github.com/IdyllBeast/supercomputer.git
 cd supercomputer
 
 # Make executable
@@ -65,24 +58,6 @@ cp supercomputer ~/.local/bin/
 echo 'export PATH="$HOME/.local/bin:$PATH"' >> ~/.bashrc
 source ~/.bashrc
 ```
-
-### Basic Usage
-
-```bash
-# Default 12×12 grid with minimal drift
-supercomputer
-
-# Auto-size to fill your terminal
-supercomputer --auto
-
-# Clean display (no UI, just LEDs)
-supercomputer --stealth
-
-# The ultimate combo
-supercomputer --auto --stealth --simple
-```
-
----
 
 ## 📖 Usage
 
@@ -245,26 +220,6 @@ else:
     line += "\033[91m ○ \033[0m"  # Red
 ```
 
-### Modify Borders
-
-```python
-# Change box-drawing characters
-print("┌" + "─" * width + "┐")  # Current
-print("╔" + "═" * width + "╗")  # Double line
-print("+" + "-" * width + "+")  # ASCII
-# Or remove borders entirely
-```
-
-### Create Custom Themes
-
-See [GUIDE.md](GUIDE.md) for detailed customization instructions, including:
-- Pre-made themes (Cyberpunk, Matrix, Minimalist, Retro)
-- Color reference tables
-- Advanced patterns
-- And much more!
-
-See [COLOR-MODES.md](COLOR-MODES.md) for complete color customization guide.
-
 ---
 
 ## 🏗️ Architecture
@@ -314,70 +269,11 @@ None! Uses only Python standard library:
 
 ---
 
-## 📊 Performance
-
-### Benchmarks
-
-| Grid Size | LEDs | CPU Usage | Memory |
-|-----------|------|-----------|--------|
-| 8×8       | 64   | ~0.3%     | ~5 MB  |
-| 12×12     | 144  | ~0.5%     | ~6 MB  |
-| 20×20     | 400  | ~1.0%     | ~8 MB  |
-| 30×30     | 900  | ~2.0%     | ~12 MB |
-
-*Measured on Intel i5, 10 FPS display rate*
-
-### Scalability
-
-- Efficiently handles grids up to 40×40 (1600 LEDs)
-- Linear performance scaling
-- No thread overhead
-- Minimal memory footprint
-
----
-
-## 🎯 Use Cases
-
-- 🎬 **Presentations** - Eye-catching background animation with color
-- 🖼️ **Digital Art** - Hypnotic visual displays with gradients
-- 💻 **Dual Monitors** - Ambient lighting effect with rainbow modes
-- 🎥 **Video Production** - Unique animated backgrounds with cycling colors
-- 🧘 **Meditation** - Soothing light patterns with gentle gradients
-- 🎮 **Streaming Overlays** - Dynamic colorful screen content
-- 📸 **Photography** - Moving light reference with color cycling
-- 🖥️ **Screensaver** - Terminal screensaver with beautiful colors
-- 🎨 **Light Shows** - Create mesmerizing color patterns
-- 🌈 **Ambient Display** - Colorful background on extra monitors
-
----
-
-## 📚 Documentation
-
-- **[GUIDE.md](GUIDE.md)** - Complete installation and customization guide
-- **[QUICKSTART.md](QUICKSTART.md)** - Quick reference for all modes and combinations
-- **[COLOR-MODES.md](COLOR-MODES.md)** - Complete guide to color modes and gradients
-- **[CUSTOMIZE.md](CUSTOMIZE.md)** - Detailed customization instructions
-- **[ARCHITECTURE.md](ARCHITECTURE.md)** - Technical architecture documentation
-- **[REFACTORING.md](REFACTORING.md)** - Code quality improvements log
-
----
-
-## 🤝 Contributing
-
-Contributions are welcome! Here are some ideas:
-
-- 🎨 New themes and color schemes
-- ✨ Additional LED patterns
-- 🔧 Performance optimizations
-- 📖 Documentation improvements
-- 🐛 Bug fixes
-- 🌟 New features
-
 ### Development
 
 ```bash
 # Clone the repo
-git clone https://github.com/yourusername/supercomputer.git
+git clone https://github.com/IdyllBeast/supercomputer.git
 cd supercomputer
 
 # Make your changes
@@ -433,8 +329,8 @@ Free to use, modify, and distribute. Make it your own!
 
 ## 📬 Contact
 
-- **Issues**: [GitHub Issues](https://github.com/yourusername/supercomputer/issues)
-- **Discussions**: [GitHub Discussions](https://github.com/yourusername/supercomputer/discussions)
+- **Issues**: [GitHub Issues](https://github.com/IdyllBeast/supercomputer/issues)
+- **Discussions**: [GitHub Discussions](https://github.com/IdyllBeast/supercomputer/discussions)
 
 ---
 
