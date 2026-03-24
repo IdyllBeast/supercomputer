@@ -111,7 +111,7 @@ class LED:
 class LEDArraySimulator:
     """Manages the entire LED array"""
     
-    def __init__(self, grid_size=DEFAULT_GRID_SIZE, base_rate=DEFAULT_RATE, variance=DEFAULT_VARIANCE, drift_rate=DEFAULT_DRIFT, auto_size=False, stealth=False, lock=False, color_mode=None):
+    def __init__(self, grid_size=DEFAULT_GRID_SIZE, base_rate=DEFAULT_RATE, variance=DEFAULT_VARIANCE, drift_rate=DEFAULT_DRIFT, auto_size=False, stealth=False, lock=False, color_mode=None, ascii_mode=False):
         self.base_rate = base_rate
         self.variance = variance
         self.drift_rate = drift_rate
@@ -120,8 +120,12 @@ class LEDArraySimulator:
         self.auto_size = auto_size
         self.stealth = stealth
         self.lock = lock
-        self.color_mode = color_mode  # None, 'cycle', 'gradient', 'rainbow'
+        self.color_mode = color_mode  # None, 'cycle', 'gradient', 'rainbow', 'rainbow-wave'
+        self.ascii_mode = ascii_mode  # Animate ASCII characters each frame
         self.start_time = None
+        self.rainbow_offset = 0  # For animated rainbow wave effect
+        self.frame_count = 0  # For ASCII animation cycling
+        self.previous_display = None  # Store previous frame to reduce flickering
         
         if auto_size:
             self.grid_size = self.calculate_optimal_grid_size()
@@ -183,13 +187,20 @@ class LEDArraySimulator:
         if not self.running:
             self.running = True
             self.start_time = time.monotonic()
+            
+            # Clear screen once at start
+            self.clear_screen()
+            self.hide_cursor()
+            
             # Initialize all LEDs to toggle at start time
             for led in self.leds:
                 led.schedule_next_toggle(self.start_time)
     
     def stop(self):
         """Stop all LEDs"""
-        self.running = False
+        if self.running:
+            self.running = False
+            self.show_cursor()
     
     def reset(self):
         """Reset all LEDs"""
@@ -234,9 +245,37 @@ class LEDArraySimulator:
             grid.append(row)
         return grid
     
+    def save_cursor_position(self):
+        """Save the current cursor position"""
+        print("\033[s", end="", flush=True)
+    
+    def restore_cursor_position(self):
+        """Restore the saved cursor position"""
+        print("\033[u", end="", flush=True)
+    
+    def move_cursor_home(self):
+        """Move cursor to home position (top-left) without clearing"""
+        print("\033[H", end="", flush=True)
+    
     def clear_screen(self):
-        """Clear terminal screen"""
-        print("\033[2J\033[H", end="")
+        """Clear terminal screen (only used on startup)"""
+        print("\033[2J\033[H", end="", flush=True)
+    
+    def enable_alternate_buffer(self):
+        """Enable alternate screen buffer (reduces flickering)"""
+        print("\033[?1049h", end="", flush=True)
+    
+    def disable_alternate_buffer(self):
+        """Disable alternate screen buffer and return to normal screen"""
+        print("\033[?1049l", end="", flush=True)
+    
+    def hide_cursor(self):
+        """Hide the terminal cursor"""
+        print("\033[?25l", end="", flush=True)
+    
+    def show_cursor(self):
+        """Show the terminal cursor"""
+        print("\033[?25h", end="", flush=True)
     
     def render_header(self):
         """Render the header section"""
@@ -248,6 +287,8 @@ class LEDArraySimulator:
             size_info += " [AUTO]"
         if self.lock:
             size_info += " [LOCKED]"
+        if self.ascii_mode:
+            size_info += " [ASCII]"
         if self.color_mode:
             size_info += f" [COLOR:{self.color_mode.upper()}]"
         
@@ -255,10 +296,10 @@ class LEDArraySimulator:
         print("=" * header_width)
         print()
     
-    def get_color(self, led, row_idx, col_idx):
+    def get_color_code(self, led, row_idx, col_idx):
         """Get ANSI color code for an LED based on color mode"""
         if self.color_mode is None:
-            return ""
+            return None
         
         COLORS = [
             '\033[91m',  # Red
@@ -268,68 +309,84 @@ class LEDArraySimulator:
             '\033[94m',  # Blue
             '\033[95m',  # Magenta
         ]
-        RESET = '\033[0m'
         
         if self.color_mode == 'cycle':
             # Each LED cycles through colors when it toggles
-            color = COLORS[led.color_index]
-            return f"{color} ● {RESET}"
+            return COLORS[led.color_index]
         
         elif self.color_mode == 'gradient':
             # Gradient across the grid (left to right)
             color_idx = int((col_idx / self.grid_size) * len(COLORS))
-            color = COLORS[min(color_idx, len(COLORS) - 1)]
-            return f"{color} ● {RESET}"
+            return COLORS[min(color_idx, len(COLORS) - 1)]
         
         elif self.color_mode == 'rainbow':
             # Rainbow pattern (diagonal)
             color_idx = (row_idx + col_idx) % len(COLORS)
-            color = COLORS[color_idx]
-            return f"{color} ● {RESET}"
+            return COLORS[color_idx]
         
-        return " ● "
+        elif self.color_mode == 'rainbow-wave':
+            # Animated rainbow wave (like oh-my-zsh)
+            # Colors shift over time creating a flowing effect
+            color_idx = (row_idx + col_idx + self.rainbow_offset) % len(COLORS)
+            return COLORS[color_idx]
+        
+        return None
     
     def render_grid(self):
         """Render the LED grid"""
         grid = self.get_display_grid()
+        RESET = '\033[0m'
         
-        if self.stealth:
-            # Stealth mode: no borders
-            led_idx = 0
-            for row_idx, row in enumerate(grid):
-                line = ""
-                for col_idx, led_on in enumerate(row):
-                    if led_on:
+        # ASCII character sets for animation
+        if self.ascii_mode:
+            # Cycle through different ASCII characters each frame
+            ASCII_CHARS_ON = [
+                ['●', '◉', '◎', '◯'],  # Circles
+                ['■', '▪', '▫', '□'],  # Squares
+                ['★', '✦', '✧', '☆'],  # Stars
+                ['◆', '◇', '◈', '◊'],  # Diamonds
+                ['●', '◐', '◑', '○'],  # Half circles
+                ['█', '▓', '▒', '░'],  # Blocks
+                ['♦', '♢', '◊', '⬥'],  # More diamonds
+                ['✱', '✲', '✳', '✴'],  # More stars
+            ]
+            ASCII_CHARS_OFF = ['·', '˙', '∙', '•', '○', '◦', '∘']
+            
+            # Select character set based on frame count
+            char_set_idx = (self.frame_count // 4) % len(ASCII_CHARS_ON)
+            char_idx = self.frame_count % 4
+            on_char = ASCII_CHARS_ON[char_set_idx][char_idx]
+            off_char = ASCII_CHARS_OFF[self.frame_count % len(ASCII_CHARS_OFF)]
+        
+        # Render LED array (no borders in any mode)
+        led_idx = 0
+        for row_idx, row in enumerate(grid):
+            line = ""
+            for col_idx, led_on in enumerate(row):
+                if led_on:
+                    if self.ascii_mode:
+                        # ASCII mode with optional colors
                         if self.color_mode:
                             led = self.leds[led_idx]
-                            line += self.get_color(led, row_idx, col_idx)
+                            color = self.get_color_code(led, row_idx, col_idx)
+                            line += f" {color}{on_char}{RESET} "
                         else:
-                            line += " ● "
+                            line += f" {on_char} "
+                    elif self.color_mode:
+                        # Color mode without ASCII
+                        led = self.leds[led_idx]
+                        color = self.get_color_code(led, row_idx, col_idx)
+                        line += f" {color}●{RESET} "
+                    else:
+                        # Standard mode
+                        line += " ● "
+                else:
+                    if self.ascii_mode:
+                        line += f" {off_char} "
                     else:
                         line += " ○ "
-                    led_idx += 1
-                print(line)
-        else:
-            # Normal mode: with borders
-            print("┌" + "─" * (self.grid_size * 4 - 1) + "┐")
-            
-            led_idx = 0
-            for row_idx, row in enumerate(grid):
-                line = "│"
-                for col_idx, led_on in enumerate(row):
-                    if led_on:
-                        if self.color_mode:
-                            led = self.leds[led_idx]
-                            line += self.get_color(led, row_idx, col_idx)
-                        else:
-                            line += " ● "
-                    else:
-                        line += " ○ "
-                    led_idx += 1
-                line += "│"
-                print(line)
-            
-            print("└" + "─" * (self.grid_size * 4 - 1) + "┘")
+                led_idx += 1
+            print(line)
     
     def render_footer(self):
         """Render the footer with status and controls"""
@@ -349,8 +406,9 @@ class LEDArraySimulator:
         print("          [+/-] adjust rate  [v] variance  [d] drift")
     
     def print_grid(self):
-        """Print the LED grid to terminal"""
-        self.clear_screen()
+        """Print the LED grid to terminal with minimal flickering"""
+        # Move cursor to home position (no clearing - just overwrite)
+        print("\033[H", end="", flush=True)
         
         if not self.stealth:
             self.render_header()
@@ -359,6 +417,17 @@ class LEDArraySimulator:
         
         if not self.stealth:
             self.render_footer()
+        
+        # Update rainbow wave offset for animation
+        if self.color_mode == 'rainbow-wave':
+            self.rainbow_offset = (self.rainbow_offset + 1) % 6
+        
+        # Update frame counter for ASCII animation
+        if self.ascii_mode:
+            self.frame_count += 1
+        
+        # Single flush at the end
+        sys.stdout.flush()
 
 
 def interactive_mode(simulator):
@@ -381,43 +450,53 @@ def interactive_mode(simulator):
                 print("Press 's' to start, 'q' to quit")
             time.sleep(2)
             
+            # Enable alternate screen buffer and hide cursor for smooth, flicker-free animation
+            simulator.enable_alternate_buffer()
+            simulator.clear_screen()
+            simulator.hide_cursor()
+            
             last_update = time.monotonic()
             
-            while True:
-                # Resize check (happens every frame, returns early if nothing changed)
-                simulator.resize()
-                
-                # Update LED states
-                simulator.update()
-                
-                # Update display at configured FPS
-                current_time = time.monotonic()
-                if current_time - last_update >= DISPLAY_INTERVAL:
-                    simulator.print_grid()
-                    last_update = current_time
-                
-                # Check for keyboard input (non-blocking)
-                if select.select([sys.stdin], [], [], KEYBOARD_TIMEOUT)[0]:
-                    key = sys.stdin.read(1).lower()
+            try:
+                while True:
+                    # Resize check (happens every frame, returns early if nothing changed)
+                    simulator.resize()
                     
-                    if key == 'q':
-                        break
-                    elif key == 's':
-                        simulator.start()
-                    elif key == 'p':
-                        simulator.stop()
-                    elif key == 'r':
-                        simulator.reset()
-                    elif key == '+':
-                        simulator.update_params(base_rate=min(MAX_RATE, simulator.base_rate + 50))
-                    elif key == '-':
-                        simulator.update_params(base_rate=max(MIN_RATE, simulator.base_rate - 50))
-                    elif key == 'v':
-                        simulator.update_params(variance=min(MAX_PERCENT, simulator.variance + 5))
-                    elif key == 'd':
-                        simulator.update_params(drift_rate=min(MAX_PERCENT, simulator.drift_rate + 5))
+                    # Update LED states
+                    simulator.update()
+                    
+                    # Update display at configured FPS
+                    current_time = time.monotonic()
+                    if current_time - last_update >= DISPLAY_INTERVAL:
+                        simulator.print_grid()
+                        last_update = current_time
+                    
+                    # Check for keyboard input (non-blocking)
+                    if select.select([sys.stdin], [], [], KEYBOARD_TIMEOUT)[0]:
+                        key = sys.stdin.read(1).lower()
+                        
+                        if key == 'q':
+                            break
+                        elif key == 's':
+                            simulator.start()
+                        elif key == 'p':
+                            simulator.stop()
+                        elif key == 'r':
+                            simulator.reset()
+                        elif key == '+':
+                            simulator.update_params(base_rate=min(MAX_RATE, simulator.base_rate + 50))
+                        elif key == '-':
+                            simulator.update_params(base_rate=max(MIN_RATE, simulator.base_rate - 50))
+                        elif key == 'v':
+                            simulator.update_params(variance=min(MAX_PERCENT, simulator.variance + 5))
+                        elif key == 'd':
+                            simulator.update_params(drift_rate=min(MAX_PERCENT, simulator.drift_rate + 5))
                 
                 time.sleep(UPDATE_SLEEP)
+            finally:
+                # Always restore cursor and screen on exit
+                simulator.show_cursor()
+                simulator.disable_alternate_buffer()
     
     except ImportError:
         print("Interactive mode requires a Unix-like terminal")
@@ -442,6 +521,11 @@ def simple_display_mode(simulator):
     print()
     time.sleep(2)
     
+    # Enable alternate buffer, clear screen and hide cursor for flicker-free animation
+    simulator.enable_alternate_buffer()
+    simulator.clear_screen()
+    simulator.hide_cursor()
+    
     simulator.start()
     
     try:
@@ -456,6 +540,10 @@ def simple_display_mode(simulator):
             time.sleep(UPDATE_SLEEP)
     except KeyboardInterrupt:
         print("\n\nStopping simulation...")
+    finally:
+        # Always restore cursor and screen on exit
+        simulator.show_cursor()
+        simulator.disable_alternate_buffer()
 
 
 def bounded_int(min_val, max_val, name="value"):
@@ -480,9 +568,12 @@ Examples:
   supercomputer --auto                   # Auto-size to fill terminal window
   supercomputer --stealth                # Stealth mode: LEDs only, no UI
   supercomputer --auto --stealth         # Auto-size in stealth mode (ULTIMATE)
+  supercomputer --ascii                  # Animated ASCII characters each frame
+  supercomputer --ascii --color cycle    # ASCII animation with colors
   supercomputer --color cycle            # LEDs change color each time they flash
   supercomputer --color gradient         # Gradient across the grid
   supercomputer --color rainbow          # Rainbow diagonal pattern
+  supercomputer --color rainbow-wave     # Animated rainbow wave (oh-my-zsh style)
   supercomputer --lock                   # Lock grid size, window can't affect it
   supercomputer --auto --lock            # Set initial size from window, then lock
   supercomputer -s 10                    # 10x10 grid
@@ -503,9 +594,11 @@ Examples:
                         help='Stealth mode: show only LED array, hide all UI elements')
     parser.add_argument('--lock', action='store_true',
                         help='Lock grid size - prevent resizing when terminal window changes')
+    parser.add_argument('--ascii', action='store_true',
+                        help='ASCII animation mode - cycle through different characters each frame')
     parser.add_argument('--color', 
-                        choices=['cycle', 'gradient', 'rainbow'],
-                        help='Color mode: cycle (LEDs change color), gradient (left-to-right), rainbow (diagonal pattern)')
+                        choices=['cycle', 'gradient', 'rainbow', 'rainbow-wave'],
+                        help='Color mode: cycle (LEDs change color), gradient (left-to-right), rainbow (diagonal), rainbow-wave (animated wave)')
     parser.add_argument('-r', '--rate',
                         type=bounded_int(MIN_RATE, MAX_RATE, "rate"),
                         default=DEFAULT_RATE,
@@ -536,7 +629,8 @@ Examples:
         auto_size=args.auto,
         stealth=args.stealth,
         lock=args.lock,
-        color_mode=args.color
+        color_mode=args.color,
+        ascii_mode=args.ascii
     )
     
     try:
